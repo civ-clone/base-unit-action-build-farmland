@@ -1,6 +1,6 @@
 {
   "name": "@civ-clone/base-unit-action-build-farmland",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "The BuildFarmland unit action: a delayed action that builds Farmland on the unit's own, already irrigated, tile.",
   "repository": "git@github.com:civ-clone/base-unit-action-build-farmland.git",
   "keywords": [
