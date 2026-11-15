@@ -1,6 +1,13 @@
+import {
+  TileImprovementRegistry,
+  instance as tileImprovementRegistryInstance,
+} from '@civ-clone/core-tile-improvement/TileImprovementRegistry';
+import Available from '@civ-clone/core-tile-improvement/Rules/Available';
 import BuildingFarmland from './Rules/BuildingFarmland';
 import DelayedAction from '@civ-clone/core-unit/DelayedAction';
 import Farmland from '@civ-clone/base-tile-improvement-farmland/Farmland';
+import Irrigation from '@civ-clone/base-tile-improvement-irrigation/Irrigation';
+import TileImprovement from '@civ-clone/core-tile-improvement/TileImprovement';
 import Moved from '@civ-clone/core-unit/Rules/Moved';
 import MovementCost from '@civ-clone/core-unit/Rules/MovementCost';
 import Unit from '@civ-clone/core-unit/Unit';
@@ -29,13 +36,42 @@ export class BuildFarmland extends DelayedAction {
   }
 
   /**
-   * What finishing does: `Farmland` on the tile the action was performed on, built through the `Built` rules of the
-   *  registry the action was constructed with. Nothing on the tile is removed.
+   * What finishing does, on the tile the action was performed on, through the `Built` rules of the registry the action
+   *  was constructed with: `Farmland` when the tile is still irrigated, keeping the `Irrigation`. When the irrigation has
+   *  gone in the meantime (pillaged, say), the work irrigates the tile instead, as OpenCiv2's irrigation order does on
+   *  a tile without irrigation (`unit_terrain_work_finish`, order 6), but only when the ruleset's `Available` rules
+   *  allow `Irrigation` there for the unit's player; otherwise it does nothing.
    *
    * Static, as in the other delayed actions: a public instance member would make the class unassignable to `Action`.
    */
-  static complete(action: BuildFarmland): void {
-    new Farmland(action.from(), action.ruleRegistry());
+  static complete(
+    action: BuildFarmland,
+    tileImprovementRegistry: TileImprovementRegistry = tileImprovementRegistryInstance
+  ): void {
+    const tile = action.from(),
+      irrigated = tileImprovementRegistry
+        .getByTile(tile)
+        .some(
+          (improvement: TileImprovement): boolean =>
+            improvement instanceof Irrigation
+        );
+
+    if (!irrigated) {
+      if (
+        action
+          .ruleRegistry()
+          .get(Available)
+          .some((rule: Available): boolean =>
+            rule.validate(tile, Irrigation, action.unit().player())
+          )
+      ) {
+        new Irrigation(tile, action.ruleRegistry());
+      }
+
+      return;
+    }
+
+    new Farmland(tile, action.ruleRegistry());
   }
 }
 

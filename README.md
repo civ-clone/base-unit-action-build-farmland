@@ -6,8 +6,10 @@ unit's own tile, which is already irrigated. The `Irrigation` stays: the tile th
 - `BuildFarmland`: `new BuildFarmland(from, to, unit, ruleRegistry?, turn?, pendingEffects?)`. `perform()` starts the
   work, for as many turns as the largest `MovementCost` answer for the action, divided by the unit's `WorkRate`
   (core-unit's `DelayedAction`), and puts the unit in the `BuildingFarmland` busy state. When the work comes due,
-  `BuildFarmland.complete(action)` builds the `Farmland` through the `Built` rules of the action's rule registry, and
-  removes nothing.
+  `BuildFarmland.complete(action, tileImprovementRegistry?)` builds the `Farmland` through the `Built` rules of the
+  action's rule registry, and removes nothing. If the tile has lost its `Irrigation` in the meantime (pillaged, say),
+  it builds `Irrigation` instead, as the irrigation order would on that tile, when the ruleset's `Available` rules
+  allow `Irrigation` there for the unit's player; otherwise it does nothing.
 - `Rules/BuildingFarmland`: the `Busy` rule the unit is in while it works.
 - `COMPLETE` (`base-unit-action-build-farmland:complete`): the handler a save records for work in progress, registered
   with `registerDelayedAction` when the module is loaded, as every delayed action is.
@@ -45,5 +47,10 @@ A library: it has no `main` and registers no rules.
 For a ruleset following OpenCiv2 (github.com/richardpenman/civ2, `src/auto/unit.cpp`), the irrigation order on an
 irrigated square builds farmland. The order is refused on a city's square, without a source of water, on a square that
 already has farmland, and without Refrigeration (`unit_cmd_terraform`). It takes the irrigation order's turns, and at
-completion leaves the irrigation in place (`unit_do_terrain_work`, order 6, in `unit_terrain_work_finish`). The menu
-entry is the irrigation one, relabelled (`menu_update_settler_orders`).
+completion leaves the irrigation in place, or irrigates a square that has lost its irrigation meanwhile
+(`unit_do_terrain_work`, order 6, in `unit_terrain_work_finish`). The menu entry is the irrigation one, relabelled
+(`menu_update_settler_orders`).
+
+One known difference: when the square's irrigation has gone, OpenCiv2 runs the irrigation order as it would on that
+terrain, and on a terrain whose irrigation result is another terrain (`improve_to >= 0`), it changes the terrain. Here
+the work only puts `Irrigation` back where the ruleset allows it, and otherwise does nothing.

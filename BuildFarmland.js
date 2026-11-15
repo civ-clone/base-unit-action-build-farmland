@@ -1,9 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BuildFarmland = exports.COMPLETE = void 0;
+const TileImprovementRegistry_1 = require("@civ-clone/core-tile-improvement/TileImprovementRegistry");
+const Available_1 = require("@civ-clone/core-tile-improvement/Rules/Available");
 const BuildingFarmland_1 = require("./Rules/BuildingFarmland");
 const DelayedAction_1 = require("@civ-clone/core-unit/DelayedAction");
 const Farmland_1 = require("@civ-clone/base-tile-improvement-farmland/Farmland");
+const Irrigation_1 = require("@civ-clone/base-tile-improvement-irrigation/Irrigation");
 const Moved_1 = require("@civ-clone/core-unit/Rules/Moved");
 const MovementCost_1 = require("@civ-clone/core-unit/Rules/MovementCost");
 const registerDelayedAction_1 = require("@civ-clone/core-unit/registerDelayedAction");
@@ -26,13 +29,28 @@ class BuildFarmland extends DelayedAction_1.default {
         this.ruleRegistry().process(Moved_1.default, this.unit(), this);
     }
     /**
-     * What finishing does: `Farmland` on the tile the action was performed on, built through the `Built` rules of the
-     *  registry the action was constructed with. Nothing on the tile is removed.
+     * What finishing does, on the tile the action was performed on, through the `Built` rules of the registry the action
+     *  was constructed with: `Farmland` when the tile is still irrigated, keeping the `Irrigation`. When the irrigation has
+     *  gone in the meantime (pillaged, say), the work irrigates the tile instead, as OpenCiv2's irrigation order does on
+     *  a tile without irrigation (`unit_terrain_work_finish`, order 6), but only when the ruleset's `Available` rules
+     *  allow `Irrigation` there for the unit's player; otherwise it does nothing.
      *
      * Static, as in the other delayed actions: a public instance member would make the class unassignable to `Action`.
      */
-    static complete(action) {
-        new Farmland_1.default(action.from(), action.ruleRegistry());
+    static complete(action, tileImprovementRegistry = TileImprovementRegistry_1.instance) {
+        const tile = action.from(), irrigated = tileImprovementRegistry
+            .getByTile(tile)
+            .some((improvement) => improvement instanceof Irrigation_1.default);
+        if (!irrigated) {
+            if (action
+                .ruleRegistry()
+                .get(Available_1.default)
+                .some((rule) => rule.validate(tile, Irrigation_1.default, action.unit().player()))) {
+                new Irrigation_1.default(tile, action.ruleRegistry());
+            }
+            return;
+        }
+        new Farmland_1.default(tile, action.ruleRegistry());
     }
 }
 exports.BuildFarmland = BuildFarmland;

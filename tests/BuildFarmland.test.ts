@@ -1,4 +1,5 @@
 import BuildFarmland, { COMPLETE } from '../BuildFarmland';
+import Available from '@civ-clone/core-tile-improvement/Rules/Available';
 import BuildingFarmland from '../Rules/BuildingFarmland';
 import Built from '@civ-clone/core-tile-improvement/Rules/Built';
 import Criterion from '@civ-clone/core-rule/Criterion';
@@ -106,7 +107,7 @@ describe('BuildFarmland', (): void => {
 
     new Irrigation(tile, ruleRegistry);
 
-    BuildFarmland.complete(action);
+    BuildFarmland.complete(action, tileImprovementRegistry);
 
     expect(built).to.have.length(2);
     expect(built[1][0]).to.equal(tile);
@@ -117,4 +118,39 @@ describe('BuildFarmland', (): void => {
         .map((improvement) => improvement.constructor)
     ).to.deep.equal([Irrigation, Farmland]);
   });
+
+  // OpenCiv2 `unit_terrain_work_finish`, order 6: a tile without irrigation when the work finishes is irrigated, here
+  //  when the ruleset's `Available` rules still allow it.
+  [true, false].forEach((allowed: boolean): void =>
+    it(`${
+      allowed ? 'irrigates the tile instead' : 'does nothing'
+    } when its irrigation has gone by the time it completes and Irrigation is ${
+      allowed ? '' : 'not '
+    }available there`, (): void => {
+      const { action, built, ruleRegistry, tile, tileImprovementRegistry } =
+        setUp(5);
+
+      const irrigation = new Irrigation(tile, ruleRegistry);
+
+      tileImprovementRegistry.unregister(irrigation);
+
+      ruleRegistry.register(
+        new Available(
+          new Criterion(
+            (availableTile: Tile, Improvement: unknown): boolean =>
+              availableTile === tile && Improvement === Irrigation && allowed
+          )
+        )
+      );
+
+      BuildFarmland.complete(action, tileImprovementRegistry);
+
+      expect(
+        tileImprovementRegistry
+          .getByTile(tile)
+          .map((improvement) => improvement.constructor)
+      ).to.deep.equal(allowed ? [Irrigation] : []);
+      expect(built.length).to.equal(allowed ? 2 : 1);
+    })
+  );
 });
