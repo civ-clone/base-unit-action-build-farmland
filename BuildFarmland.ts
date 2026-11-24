@@ -1,4 +1,17 @@
 import {
+  PendingEffectRegistry,
+  instance as pendingEffectRegistryInstance,
+} from '@civ-clone/core-pending-effect';
+import {
+  RuleRegistry,
+  instance as ruleRegistryInstance,
+} from '@civ-clone/core-rule/RuleRegistry';
+import {
+  Turn,
+  instance as turnInstance,
+} from '@civ-clone/core-turn-based-game/Turn';
+import { BusyContext } from '@civ-clone/core-unit/BusyRegistry';
+import {
   TileImprovementRegistry,
   instance as tileImprovementRegistryInstance,
 } from '@civ-clone/core-tile-improvement/TileImprovementRegistry';
@@ -7,6 +20,7 @@ import BuildingFarmland from './Rules/BuildingFarmland';
 import DelayedAction from '@civ-clone/core-unit/DelayedAction';
 import Farmland from '@civ-clone/base-tile-improvement-farmland/Farmland';
 import Irrigation from '@civ-clone/base-tile-improvement-irrigation/Irrigation';
+import Tile from '@civ-clone/core-world/Tile';
 import TileImprovement from '@civ-clone/core-tile-improvement/TileImprovement';
 import Moved from '@civ-clone/core-unit/Rules/Moved';
 import MovementCost from '@civ-clone/core-unit/Rules/MovementCost';
@@ -25,6 +39,30 @@ export const COMPLETE = 'base-unit-action-build-farmland:complete';
  *  `Available` rule allowing `Farmland` there, the unit's own tile, already irrigated).
  */
 export class BuildFarmland extends DelayedAction {
+  #tileImprovementRegistry: TileImprovementRegistry;
+
+  /**
+   * As `DelayedAction`'s, with the registry finishing looks for the tile's `Irrigation` in: the game's own, so a game
+   *  built with its own registries finds it (civ-clone/web-renderer#248).
+   */
+  constructor(
+    from: Tile,
+    to: Tile,
+    unit: Unit,
+    ruleRegistry: RuleRegistry = ruleRegistryInstance,
+    turn: Turn = turnInstance,
+    pendingEffects: PendingEffectRegistry = pendingEffectRegistryInstance,
+    tileImprovementRegistry: TileImprovementRegistry = tileImprovementRegistryInstance
+  ) {
+    super(from, to, unit, ruleRegistry, turn, pendingEffects);
+
+    this.#tileImprovementRegistry = tileImprovementRegistry;
+  }
+
+  tileImprovementRegistry(): TileImprovementRegistry {
+    return this.#tileImprovementRegistry;
+  }
+
   perform(): void {
     const [moveCost]: number[] = this.ruleRegistry()
       .process(MovementCost, this.unit(), this)
@@ -80,8 +118,22 @@ export class BuildFarmland extends DelayedAction {
 registerDelayedAction({
   BusyRule: BuildingFarmland,
   handler: COMPLETE,
-  action: (unit: Unit) => new BuildFarmland(unit.tile(), unit.tile(), unit),
-  complete: (unit, pendingEffect, action) => BuildFarmland.complete(action),
+  // Built from the game the unit is loaded into, so finishing after a load writes where that game looks
+  //  (civ-clone/web-renderer#248).
+  action: (unit: Unit, context: BusyContext) =>
+    new BuildFarmland(
+      unit.tile(),
+      unit.tile(),
+      unit,
+      context.rules,
+      context.turn,
+      context.pendingEffects,
+      (
+        context as { tileImprovements?: TileImprovementRegistry }
+      ).tileImprovements
+    ),
+  complete: (unit, pendingEffect, action) =>
+    BuildFarmland.complete(action, action.tileImprovementRegistry()),
 });
 
 export default BuildFarmland;
